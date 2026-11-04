@@ -294,6 +294,7 @@ fieldset{border:0;padding:0;margin:0}
 .thanks .script{font-size:3rem}
 .thanks .ar{font-size:1.6rem;margin-top:10px}
 .thanks .gloss{font-style:italic;font-size:.95rem;color:var(--ink-soft)}
+.again{margin-top:18px;background:none;border:0;border-bottom:1px solid rgba(120,111,80,.45);padding:2px 0;font:italic .95rem var(--serif);color:var(--khaki);cursor:pointer}
 footer{position:relative;background:radial-gradient(ellipse at 50% 0,#fdf5ec 0,#f6e5da 60%,#efd8cb 100%);text-align:center;padding:56px 20px calc(70px + env(safe-area-inset-bottom,0px));overflow:hidden}
 footer .script{font-size:2.7rem}
 footer .ar{font-size:1.25rem}
@@ -484,6 +485,7 @@ footer .fl.b{right:-36px;bottom:-30px;transform:scale(-1,-1)}
     <p id="thanksMsg"></p>
     <div class="ar" lang="ar">وعقبال عندكم</div>
     <div class="gloss">and may your joyful day come soon</div>
+    <button type="button" class="again" id="again">Send another reply</button>
   </div>
 </section>
 
@@ -649,7 +651,19 @@ addEventListener("deviceorientation", e => { if (e.gamma!=null) aim(e.gamma/25, 
   requestAnimationFrame(float);
 })(0);
 
+/* ---------- who opened it (logged to the RSVP sheet, "Opens" tab) ---------- */
+const GUEST = (new URLSearchParams(location.search).get("g") || "").trim().slice(0, 60);
+function track(event){
+  if (!CONFIG.rsvpEndpoint || !/^https:/.test(location.protocol) || /claudeusercontent|claude\.ai/.test(location.host)) return;
+  const key = "seen-" + event;
+  try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, "1"); } catch(e){}
+  const device = /iPhone|iPad/.test(navigator.userAgent) ? "iPhone/iPad" : /Android/.test(navigator.userAgent) ? "Android" : "Computer";
+  try { fetch(CONFIG.rsvpEndpoint, {method:"POST", mode:"no-cors", keepalive:true, headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify({type:"open", event, guest:GUEST, device})}); } catch(e){}
+}
+track("Opened the link");
+
 function openEnv(){
+  track("Opened the envelope");
   if (env.dataset.opening) return;
   env.dataset.opening = 1;
   try { navigator.vibrate && navigator.vibrate(12); } catch(e){}
@@ -825,6 +839,11 @@ const ICONS = {
     if (celebrate){ const r = $("#thanks").getBoundingClientRect(); burst(r.left+r.width/2, r.top+30, 90, {speed:9}); burst(r.left+r.width/2, r.top+30, 30, {speed:7, petal:true, slow:true}); }
   }
   try { const prev = localStorage.getItem("rsvp-sent"); if (prev) thanks(JSON.parse(prev), false); } catch(e){}
+  $("#again").addEventListener("click", () => {
+    try { localStorage.removeItem("rsvp-sent"); } catch(e){}
+    form.reset(); $("#thanks").classList.remove("show"); form.style.display = "";
+    form.dispatchEvent(new Event("change")); form.name.focus();
+  });
   const need = $("#need");
   function check(){ const ok = form.name.value.trim() && form.querySelector("input[name=attending]:checked"); btn.disabled = !ok; need.classList.toggle("ok", !!ok); }
   const guests = $("#guests");
@@ -843,6 +862,7 @@ const ICONS = {
   $("#stepPlus").addEventListener("click", () => { if (plusN < MAXG){ plusN++; paint(); } });
   paint(); out.classList.remove("bump");
   form.addEventListener("change", toggleStep);
+  if (GUEST && !form.name.value) form.name.value = GUEST;
   form.addEventListener("input", check); form.addEventListener("change", () => { check(); toggleGuests(); }); check(); toggleGuests();
   form.addEventListener("submit", async e => {
     e.preventDefault();
@@ -853,7 +873,7 @@ const ICONS = {
     if (!CONFIG.rsvpEndpoint){ status.textContent = "Replies aren’t connected yet. Add the RSVP link in CONFIG."; return; }
     btn.disabled = true; btn.textContent = "Sending…"; status.textContent = "";
     try {
-      await fetch(CONFIG.rsvpEndpoint, {method:"POST", mode:"no-cors", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify({name, attending, guests, message})});
+      await fetch(CONFIG.rsvpEndpoint, {method:"POST", mode:"no-cors", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify({name, attending, guests, message, guest:GUEST})});
       try { localStorage.setItem("rsvp-sent", JSON.stringify({name, attending, guests})); } catch(e){}
       thanks({name, attending, guests}, true);
     } catch(err){ status.textContent = "Your reply didn’t send. Check your connection and try again."; }
